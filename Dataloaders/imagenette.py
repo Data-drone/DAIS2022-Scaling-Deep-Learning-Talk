@@ -12,7 +12,6 @@ class ImagenetteDataModule(LightningDataModule):
     """
   
     name = 'imagenette'
-    dims = {3, 224, 224}
     
     def __init__(self,
                 data_dir: str,
@@ -27,6 +26,7 @@ class ImagenetteDataModule(LightningDataModule):
         self.workers = num_workers
         self.pin_memory = pin_memory
         self.num_classes = 10
+        self.image_shape = [3, 224, 224]
 
     def train_dataloader(self):
         train_dir = os.path.join(self.data_dir, 'train')
