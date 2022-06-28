@@ -168,7 +168,7 @@ def main_train(data_module:Type[LightningDataModule], model:Type[LightningModule
             # log model
             mlflow.pytorch.log_model(model, "models")
 
-            return trainer
+        return trainer
 
     else:
         trainer.fit(model, data_module)

@@ -62,11 +62,10 @@ from Dataloaders.imagenette import ImagenetteDataModule
 # COMMAND ----------
 
 batch_size = 32
-epochs=10
 
 # COMMAND ----------
 
-data_module = ImagenetteDataModule(imagenette_data_path)
+data_module = ImagenetteDataModule(data_dir=imagenette_data_path, batch_size=batch_size)
 model = ResnetClassification(*data_module.image_shape, num_classes=data_module.num_classes, pretrain=False)
 
 # COMMAND ----------
@@ -106,7 +105,7 @@ model = ResnetClassification(*data_module.image_shape, num_classes=data_module.n
 ## It is important to set the root dir for Repos as we cannot write to the local folder with code
 main_train(data_module, model, 
            num_gpus=1, root_dir=dais_root_folder, 
-           epoch=3, strat=None, 
+           epoch=15, strat=None, 
            experiment_id=dais_experiment_id, 
            run_name='baseline_single_tune')
 
@@ -114,51 +113,29 @@ main_train(data_module, model,
 
 # MAGIC %md
 # MAGIC 
-# MAGIC ## Leverage PyTorch Lightning AutoTune
+# MAGIC ## Double Batch Again
 # MAGIC 
-# MAGIC PyTorch Lighting has an autotune capability that can help us tofind the best batch size as well as the best learning rate
-# MAGIC This will become more important later
+# MAGIC When we double the batch size again and add 2 more workers it no longer seems to have an effect
 
 # COMMAND ----------
 
-num_workers = 8
+num_workers = 10
 pin_memory = True
-batch_size = 64
-run_name = 'baseline_pl_autotune'
+batch_size = 128
 
 data_module = ImagenetteDataModule(data_dir=imagenette_data_path, batch_size=batch_size, 
                                    num_workers=num_workers, pin_memory=pin_memory)
 
 model = ResnetClassification(*data_module.image_shape, num_classes=data_module.num_classes, pretrain=False)
 
-trainer = build_trainer(
-  num_gpus=1, 
-  root_dir=dais_root_folder, 
-  epoch=3,
-  strat=None,
-  run_name=run_name,
-  auto_scale_batch_size=None,
-  auto_lr_find=True,
-  precision=16 # 16 bit precision is faster
-)
-
 # COMMAND ----------
 
-trainer.tune(model, datamodule=data_module)
-
-# COMMAND ----------
-
-# Since we split out the Trainer object we now need to manually fit
-import mlflow
-
-with mlflow.start_run(experiment_id=dais_experiment_id, run_name=run_name) as run:
-            
-  mlflow.log_param("model", model.model_tag)
-
-  trainer.fit(model, data_module)
-
-  # log model
-  mlflow.pytorch.log_model(model, "models")
+## It is important to set the root dir for Repos as we cannot write to the local folder with code
+main_train(data_module, model, 
+           num_gpus=1, root_dir=dais_root_folder, 
+           epoch=15, strat=None, 
+           experiment_id=dais_experiment_id, 
+           run_name='baseline_single_tune_large_batch')
 
 # COMMAND ----------
 
@@ -183,7 +160,7 @@ model = ResnetClassification(*data_module.image_shape, num_classes=data_module.n
 trainer = build_trainer(
   num_gpus=num_gpus, 
   root_dir=dais_root_folder, 
-  epoch=3,
+  epoch=15,
   strat=strat,
   run_name=run_name,
   auto_scale_batch_size=None,
@@ -206,6 +183,147 @@ with mlflow.start_run(experiment_id=dais_experiment_id, run_name=run_name) as ru
 
   # log model
   mlflow.pytorch.log_model(model, "models")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC 
+# MAGIC ### Dual Manual
+
+# COMMAND ----------
+
+num_workers = 8
+pin_memory = True
+batch_size = 64
+num_gpus = 2
+strat = 'dp'
+
+data_module = ImagenetteDataModule(data_dir=imagenette_data_path, batch_size=batch_size, 
+                                   num_workers=num_workers, pin_memory=pin_memory)
+
+model = ResnetClassification(*data_module.image_shape, num_classes=data_module.num_classes, pretrain=False)
+
+# COMMAND ----------
+
+## It is important to set the root dir for Repos as we cannot write to the local folder with code
+main_train(data_module, model, 
+           num_gpus=num_gpus, root_dir=dais_root_folder, 
+           epoch=15, strat=strat, 
+           experiment_id=dais_experiment_id, 
+           run_name='opt_dual_tune')
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC 
+# MAGIC ### Quad GPU
+
+# COMMAND ----------
+
+num_workers = 8
+pin_memory = True
+batch_size = 64
+num_gpus = 4
+strat = 'dp'
+
+data_module = ImagenetteDataModule(data_dir=imagenette_data_path, batch_size=batch_size, 
+                                   num_workers=num_workers, pin_memory=pin_memory)
+
+model = ResnetClassification(*data_module.image_shape, num_classes=data_module.num_classes, pretrain=False)
+
+# COMMAND ----------
+
+## It is important to set the root dir for Repos as we cannot write to the local folder with code
+main_train(data_module, model, 
+           num_gpus=num_gpus, root_dir=dais_root_folder, 
+           epoch=15, strat=strat, 
+           experiment_id=dais_experiment_id, 
+           run_name='opt_quad_tune')
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC 
+# MAGIC ### Horovod Runner Dual
+
+# COMMAND ----------
+
+num_workers = 8
+pin_memory = True
+batch_size = 64
+num_gpus = 2
+#strat = 'dp'
+
+data_module = ImagenetteDataModule(data_dir=imagenette_data_path, batch_size=batch_size, 
+                                   num_workers=num_workers, pin_memory=pin_memory)
+
+model = ResnetClassification(*data_module.image_shape, num_classes=data_module.num_classes, pretrain=False)
+
+# COMMAND ----------
+
+hr = HorovodRunner(np=-num_gpus)
+hr.run(main_hvd, 
+         mlflow_db_host=databricks_host, 
+         mlflow_db_token=databricks_host, 
+         data_module=data_module, 
+         model=model, 
+         root_dir=dais_root_folder, 
+         epochs=15, 
+         run_name='hvd_runner_dual', 
+         experiment_id=dais_experiment_id)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC 
+# MAGIC ### Horovod Runner Quad
+
+# COMMAND ----------
+
+num_workers = 8
+pin_memory = True
+batch_size = 64
+num_gpus = 4
+#strat = 'dp'
+
+data_module = ImagenetteDataModule(data_dir=imagenette_data_path, batch_size=batch_size, 
+                                   num_workers=num_workers, pin_memory=pin_memory)
+
+model = ResnetClassification(*data_module.image_shape, num_classes=data_module.num_classes, pretrain=False)
+
+# COMMAND ----------
+
+hr = HorovodRunner(np=-num_gpus)
+hr.run(main_hvd, 
+         mlflow_db_host=databricks_host, 
+         mlflow_db_token=databricks_token
+         data_module=data_module, 
+         model=model, 
+         root_dir=dais_root_folder, 
+         epochs=15, 
+         run_name='hvd_runner_quad', 
+         experiment_id=dais_experiment_id)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC 
+# MAGIC # Analyse with Tensorboard
+
+# COMMAND ----------
+
+# MAGIC %sh
+# MAGIC 
+# MAGIC ls /dbfs/Users/brian.law@databricks.com/dais_exp/logs
+
+# COMMAND ----------
+
+# MAGIC %load_ext tensorboard
+# MAGIC experiment_log_dir = '/dbfs/Users/brian.law@databricks.com/dais_exp/logs'
+
+# COMMAND ----------
+
+# MAGIC %tensorboard --logdir $experiment_log_dir
 
 # COMMAND ----------
 
