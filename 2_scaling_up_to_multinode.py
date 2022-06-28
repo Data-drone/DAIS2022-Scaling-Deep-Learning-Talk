@@ -53,9 +53,7 @@ model = ResnetClassification(*data_module.image_shape, num_classes=data_module.n
 # MAGIC # Trigger runs
 # MAGIC 
 # MAGIC We use horovod spark to scale up across nodes.
-# MAGIC This is because HorovodRunner currently doesn't distribute Python Modules onto worker nodes.
-# MAGIC 
-# MAGIC *NOTE* The spark error doesn't affect actual model training. It seems that the spark process is just waiting for some output before it terminates and it isn't getting it so it times out
+# MAGIC This is because HorovodRunner currently doesn't distribute Python Modules onto worker nodes
 
 # COMMAND ----------
 
@@ -88,7 +86,7 @@ model = horovod.spark.run(main_hvd,
 # COMMAND ----------
 
 66# set to the number of workers * ?num gpu per worker?
-num_processes = 8
+num_processes = 2
 epochs = 15
 
 model = horovod.spark.run(main_hvd, 
@@ -102,6 +100,10 @@ model = horovod.spark.run(main_hvd,
          'experiment_id': dais_experiment_id},
          num_proc=num_processes, 
          verbose=2)
+
+# COMMAND ----------
+
+model
 
 # COMMAND ----------
 
