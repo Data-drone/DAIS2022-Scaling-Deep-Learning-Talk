@@ -203,6 +203,8 @@ main_train(data_module, model,
 # MAGIC ### Quad GPU
 # MAGIC 
 # MAGIC Moving to quad GPU doesn't give us much in the way of speed ups either.
+# MAGIC 
+# MAGIC 15 epochs took 20 minutes
 
 # COMMAND ----------
 
@@ -231,6 +233,13 @@ main_train(data_module, model,
 # MAGIC %md
 # MAGIC 
 # MAGIC ### Horovod Runner Dual
+# MAGIC 
+# MAGIC Before I mentioned that 'dp' is not recommended. In order to be able to leverage a more performant distribution methodology we will use HorovodRunner. 
+# MAGIC 
+# MAGIC See:
+# MAGIC - https://docs.databricks.com/applications/machine-learning/train-model/distributed-training/horovod-runner.html
+# MAGIC 
+# MAGIC With HorovodRunner 15 epochs takes 17 minutes now we are starting to get decent scaling for our job
 
 # COMMAND ----------
 
@@ -247,6 +256,7 @@ model = ResnetClassification(*data_module.image_shape, num_classes=data_module.n
 
 # COMMAND ----------
 
+# negative number will make Horovod run on the driver node
 hr = HorovodRunner(np=-num_gpus)
 hr.run(main_hvd, 
          mlflow_db_host=databricks_host, 
@@ -263,6 +273,10 @@ hr.run(main_hvd,
 # MAGIC %md
 # MAGIC 
 # MAGIC ### Horovod Runner Quad
+# MAGIC 
+# MAGIC Using HorovodRunner with 4 gpus took 10 minutes with 15 epochs
+# MAGIC 
+# MAGIC Finally we can scale our code more efficiently
 
 # COMMAND ----------
 
@@ -306,10 +320,6 @@ hr.run(main_hvd,
 # MAGIC %sh
 # MAGIC 
 # MAGIC ls /dbfs/Users/brian.law@databricks.com/dais_exp/logs
-
-# COMMAND ----------
-
-dbutils.fs.rm('/Users/brian.law@databricks.com/dais_exp/logs/hvd_spark_8_wrk', True)
 
 # COMMAND ----------
 
