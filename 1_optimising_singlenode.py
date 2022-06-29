@@ -19,6 +19,8 @@ import os
 # MAGIC %md
 # MAGIC 
 # MAGIC ## Configuration Parameters
+# MAGIC 
+# MAGIC We explicity provide the workspace and token for mlflow because it doesn't necessarily get picked up by the separate Python Processes that parallel training spins off. 
 
 # COMMAND ----------
 
@@ -41,6 +43,10 @@ dais_experiment_id = 3156978719066434
 # MAGIC %md
 # MAGIC 
 # MAGIC ## Load Modules
+# MAGIC 
+# MAGIC We put our main modelling code into a standard python module here.
+# MAGIC See:
+# MAGIC - https://databricks.com/blog/2021/10/07/databricks-repos-is-now-generally-available.html
 
 # COMMAND ----------
 
@@ -58,6 +64,10 @@ from Dataloaders.imagenette import ImagenetteDataModule
 # MAGIC %md
 # MAGIC 
 # MAGIC ## Baseline
+# MAGIC 
+# MAGIC We set a baseline experiment first so that we have something to benchmark against and work off of. This is a single GPU setup
+# MAGIC 
+# MAGIC This took 12 mins to run with 3 epochs in my test setup with AWS g4 node
 
 # COMMAND ----------
 
@@ -73,7 +83,7 @@ model = ResnetClassification(*data_module.image_shape, num_classes=data_module.n
 ## It is important to set the root dir for Repos as we cannot write to the local folder with code
 main_train(data_module, model, 
            num_gpus=1, root_dir=dais_root_folder, 
-           epoch=3, strat=None, 
+           epoch=15, strat=None, 
            experiment_id=dais_experiment_id, 
            run_name='baseline_run')
 
@@ -88,6 +98,8 @@ main_train(data_module, model,
 # MAGIC And also `pin_memory` which helps to optimise the data transfer between cpu and gpu.
 # MAGIC 
 # MAGIC We can also look to increase the batch size to fill up our GPU ram
+# MAGIC 
+# MAGIC On my test setup with g4 node this run took 30 mins with 15 epochs
 
 # COMMAND ----------
 
@@ -115,7 +127,9 @@ main_train(data_module, model,
 # MAGIC 
 # MAGIC ## Double Batch Again
 # MAGIC 
-# MAGIC When we double the batch size again and add 2 more workers it no longer seems to have an effect
+# MAGIC When we double the batch size again and add 2 more workers it no longer seems to have an effect.
+# MAGIC 
+# MAGIC This run took 30 mins with 15 epochs as well 
 
 # COMMAND ----------
 
@@ -133,7 +147,7 @@ model = ResnetClassification(*data_module.image_shape, num_classes=data_module.n
 ## It is important to set the root dir for Repos as we cannot write to the local folder with code
 main_train(data_module, model, 
            num_gpus=1, root_dir=dais_root_folder, 
-           epoch=15, strat=None, 
+           epoch=3, strat=None, 
            experiment_id=dais_experiment_id, 
            run_name='baseline_single_tune_large_batch')
 
@@ -142,53 +156,19 @@ main_train(data_module, model,
 # MAGIC %md
 # MAGIC 
 # MAGIC ## Adding GPUs
-
-# COMMAND ----------
-
-num_workers = 8
-pin_memory = True
-batch_size = 64
-num_gpus = 2
-strat = 'dp'
-run_name = 'dual_gpu_pl_autotune'
-
-data_module = ImagenetteDataModule(data_dir=imagenette_data_path, batch_size=batch_size, 
-                                   num_workers=num_workers, pin_memory=pin_memory)
-
-model = ResnetClassification(*data_module.image_shape, num_classes=data_module.num_classes, pretrain=False)
-
-trainer = build_trainer(
-  num_gpus=num_gpus, 
-  root_dir=dais_root_folder, 
-  epoch=15,
-  strat=strat,
-  run_name=run_name,
-  auto_scale_batch_size=None,
-  auto_lr_find=True,
-  precision=16 # 16 bit precision is faster
-)
-
-trainer.tune(model, datamodule=data_module)
-
-# COMMAND ----------
-
-# Since we split out the Trainer object we now need to manually fit
-import mlflow
-
-with mlflow.start_run(experiment_id=dais_experiment_id, run_name=run_name) as run:
-            
-  mlflow.log_param("model", model.model_tag)
-
-  trainer.fit(model, data_module)
-
-  # log model
-  mlflow.pytorch.log_model(model, "models")
+# MAGIC 
+# MAGIC We have now hit the limit on what we can get tuning the Dataloader. So lets look to start adding GPUs to see the effect.
+# MAGIC 
+# MAGIC *Note* I use 'dp' here just to quick illustrate dual gpu.
+# MAGIC PyTorch does not recommend using 'dp' usually but the recommended option 'ddp' won't work in an interactive notebook. We will address this later
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC 
-# MAGIC ### Dual Manual
+# MAGIC ### Dual GPU with DP
+# MAGIC 
+# MAGIC This run took 21 mins with 15 epochs. So we can see that we definitely aren't achieving much in the way of scaling
 
 # COMMAND ----------
 
@@ -217,6 +197,8 @@ main_train(data_module, model,
 # MAGIC %md
 # MAGIC 
 # MAGIC ### Quad GPU
+# MAGIC 
+# MAGIC Moving to quad GPU doesn't give us much in the way of speed ups either.
 
 # COMMAND ----------
 
@@ -315,6 +297,10 @@ hr.run(main_hvd,
 # MAGIC %sh
 # MAGIC 
 # MAGIC ls /dbfs/Users/brian.law@databricks.com/dais_exp/logs
+
+# COMMAND ----------
+
+dbutils.fs.rm('/Users/brian.law@databricks.com/dais_exp/logs/hvd_spark_8_wrk', True)
 
 # COMMAND ----------
 
