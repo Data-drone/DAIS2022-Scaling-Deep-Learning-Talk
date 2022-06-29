@@ -21,6 +21,10 @@ import os
 # MAGIC ## Configuration Parameters
 # MAGIC 
 # MAGIC We explicity provide the workspace and token for mlflow because it doesn't necessarily get picked up by the separate Python Processes that parallel training spins off. 
+# MAGIC 
+# MAGIC For these examples we use the imagenette dataset.
+# MAGIC See:
+# MAGIC - https://github.com/fastai/imagenette
 
 # COMMAND ----------
 
@@ -67,7 +71,7 @@ from Dataloaders.imagenette import ImagenetteDataModule
 # MAGIC 
 # MAGIC We set a baseline experiment first so that we have something to benchmark against and work off of. This is a single GPU setup
 # MAGIC 
-# MAGIC This took 12 mins to run with 3 epochs in my test setup with AWS g4 node
+# MAGIC This took 34 mins to run with 15 epochs in my test setup with AWS g4 node
 
 # COMMAND ----------
 
@@ -291,6 +295,11 @@ hr.run(main_hvd,
 # MAGIC %md
 # MAGIC 
 # MAGIC # Analyse with Tensorboard
+# MAGIC 
+# MAGIC Databricks supports Tensorboard which can be run in a notebook or opened up on a different tab
+# MAGIC 
+# MAGIC See: 
+# MAGIC - https://docs.databricks.com/applications/machine-learning/train-model/tensorflow.html
 
 # COMMAND ----------
 
