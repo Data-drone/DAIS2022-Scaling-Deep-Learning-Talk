@@ -54,6 +54,8 @@ model = ResnetClassification(*data_module.image_shape, num_classes=data_module.n
 # MAGIC 
 # MAGIC We use horovod spark to scale up across nodes.
 # MAGIC This is because HorovodRunner currently doesn't distribute Python Modules onto worker nodes
+# MAGIC 
+# MAGIC this setup took 22 minutes to run
 
 # COMMAND ----------
 
@@ -82,11 +84,15 @@ model = horovod.spark.run(main_hvd,
 # MAGIC %md
 # MAGIC 
 # MAGIC # Moving to 8 GPUS
+# MAGIC 
+# MAGIC Now lets move up to 8. 
+# MAGIC 
+# MAGIC This setup took 7 minutes to run
 
 # COMMAND ----------
 
 66# set to the number of workers * ?num gpu per worker?
-num_processes = 2
+num_processes = 8
 epochs = 15
 
 model = horovod.spark.run(main_hvd, 
