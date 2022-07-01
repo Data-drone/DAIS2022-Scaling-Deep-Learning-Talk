@@ -3,7 +3,16 @@
 # MAGIC 
 # MAGIC # Scaling on Single Node
 # MAGIC 
-# MAGIC As we discussed, it is more efficient to scale on single node first
+# MAGIC As we discussed, it is more efficient to scale on single node first.
+# MAGIC 
+# MAGIC All code was developed on 10.4 LTS ML Runtime
+# MAGIC 
+# MAGIC Cluster libraries that you need to install are:
+# MAGIC - pytorch-lightining
+# MAGIC - torch_tb_profiler
+# MAGIC 
+# MAGIC See:
+# MAGIC - https://docs.databricks.com/libraries/cluster-libraries.html
 
 # COMMAND ----------
 
