@@ -44,6 +44,10 @@ dais_experiment_id = 3156978719066434
 
 # COMMAND ----------
 
+
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC 
 # MAGIC ## Load Modules
@@ -159,6 +163,38 @@ main_train(data_module, model,
 
 # MAGIC %md
 # MAGIC 
+# MAGIC ## Add FP16
+# MAGIC 
+# MAGIC FP16 can help a lot in making models train faster.
+# MAGIC Modern GPUs have special cores for accelerating FP16 calcs
+# MAGIC 
+# MAGIC Whilst upping batch_size to 128 had minimal effect FP16 accelerated our training run down to 16 mins at 15 epochs
+
+# COMMAND ----------
+
+num_workers = 10
+pin_memory = True
+batch_size = 128
+
+data_module = ImagenetteDataModule(data_dir=imagenette_data_path, batch_size=batch_size, 
+                                   num_workers=num_workers, pin_memory=pin_memory)
+
+model = ResnetClassification(*data_module.image_shape, num_classes=data_module.num_classes, pretrain=False)
+
+# COMMAND ----------
+
+## It is important to set the root dir for Repos as we cannot write to the local folder with code
+main_train(data_module, model, 
+           num_gpus=1, root_dir=dais_root_folder, 
+           epoch=15, strat=None, 
+           precision=16,
+           experiment_id=dais_experiment_id, 
+           run_name='baseline_single_tune_large_batch_fp16')
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC 
 # MAGIC ## Adding GPUs
 # MAGIC 
 # MAGIC We have now hit the limit on what we can get tuning the Dataloader. So lets look to start adding GPUs to see the effect.
@@ -193,8 +229,9 @@ model = ResnetClassification(*data_module.image_shape, num_classes=data_module.n
 main_train(data_module, model, 
            num_gpus=num_gpus, root_dir=dais_root_folder, 
            epoch=15, strat=strat, 
-           experiment_id=dais_experiment_id, 
-           run_name='opt_dual_tune')
+           experiment_id=dais_experiment_id,
+           precision=16,
+           run_name='opt_dual_tune_fp16')
 
 # COMMAND ----------
 
@@ -226,6 +263,7 @@ main_train(data_module, model,
            num_gpus=num_gpus, root_dir=dais_root_folder, 
            epoch=15, strat=strat, 
            experiment_id=dais_experiment_id, 
+           precision=16,
            run_name='opt_quad_tune')
 
 # COMMAND ----------
@@ -239,7 +277,7 @@ main_train(data_module, model,
 # MAGIC See:
 # MAGIC - https://docs.databricks.com/applications/machine-learning/train-model/distributed-training/horovod-runner.html
 # MAGIC 
-# MAGIC With HorovodRunner 15 epochs takes 17 minutes now we are starting to get decent scaling for our job
+# MAGIC With HorovodRunner 15 epochs takes 10 minutes now we are starting to get decent scaling for our job
 
 # COMMAND ----------
 
@@ -260,30 +298,29 @@ model = ResnetClassification(*data_module.image_shape, num_classes=data_module.n
 hr = HorovodRunner(np=-num_gpus)
 hr.run(main_hvd, 
          mlflow_db_host=databricks_host, 
-         mlflow_db_token=databricks_host, 
+         mlflow_db_token=databricks_token, 
          data_module=data_module, 
          model=model, 
          root_dir=dais_root_folder, 
          epochs=15, 
-         run_name='hvd_runner_dual', 
+         precision=16,
+         run_name='hvd_runner_dual_fp16', 
          experiment_id=dais_experiment_id)
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC 
-# MAGIC ### Horovod Runner Quad
+# MAGIC ### Horovod Runner Triple
 # MAGIC 
-# MAGIC Using HorovodRunner with 4 gpus took 10 minutes with 15 epochs
-# MAGIC 
-# MAGIC Finally we can scale our code more efficiently
+# MAGIC Using HorovodRunner with 3 gpus took 8 minutes with 15 epochs
 
 # COMMAND ----------
 
 num_workers = 8
 pin_memory = True
 batch_size = 64
-num_gpus = 4
+num_gpus = 3
 #strat = 'dp'
 
 data_module = ImagenetteDataModule(data_dir=imagenette_data_path, batch_size=batch_size, 
@@ -296,12 +333,13 @@ model = ResnetClassification(*data_module.image_shape, num_classes=data_module.n
 hr = HorovodRunner(np=-num_gpus)
 hr.run(main_hvd, 
          mlflow_db_host=databricks_host, 
-         mlflow_db_token=databricks_token
+         mlflow_db_token=databricks_token,
          data_module=data_module, 
          model=model, 
          root_dir=dais_root_folder, 
          epochs=15, 
-         run_name='hvd_runner_quad', 
+         precision=16,
+         run_name='hvd_runner_triple_fp16', 
          experiment_id=dais_experiment_id)
 
 # COMMAND ----------
@@ -310,10 +348,11 @@ hr.run(main_hvd,
 # MAGIC 
 # MAGIC # Analyse with Tensorboard
 # MAGIC 
-# MAGIC Databricks supports Tensorboard which can be run in a notebook or opened up on a different tab
+# MAGIC Databricks supports Tensorboard which can be run in a notebook or opened up on a different tab. the code that we have setup will drop the tensorboard logs into the /dbfs/Users/<your_user>/dais_exp/logs folder. We have enable profiling in our main training function which will also take detailed performance metrics for the training job. The profiler also helps in highlighting suggested performance improvements that can be made.
 # MAGIC 
 # MAGIC See: 
 # MAGIC - https://docs.databricks.com/applications/machine-learning/train-model/tensorflow.html
+# MAGIC - https://pytorch.org/tutorials/intermediate/tensorboard_profiler_tutorial.html
 
 # COMMAND ----------
 
@@ -329,6 +368,14 @@ hr.run(main_hvd,
 # COMMAND ----------
 
 # MAGIC %tensorboard --logdir $experiment_log_dir
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC 
+# MAGIC # Next Steps
+# MAGIC 
+# MAGIC We started with a baseline of 34 minutes for our baseline run. With FP16 and increasing the batch size, we can get the runtime down to 16 minutes. With HorovodRunner we were then able to scale to two GPUs at 10 minutes and 3 gpus at 8 minutes. So you can see that we do no achieve 1:1 scaling.
 
 # COMMAND ----------
 
