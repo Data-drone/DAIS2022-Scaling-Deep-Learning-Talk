@@ -34,19 +34,24 @@ def main_hvd(mlflow_db_host:str, mlflow_db_token:str,
 
     """
     
+    In order to leverage horovod we need to wrap the main train function with a hvd.init
+    
     Args:
-        mlflow_db_host: 
-        mlflow_db_token:
-        data_module:
-        model:
-        experiment_log_dir
-        epochs: 
+        mlflow_db_host: the url for your workspace 
+        mlflow_db_token: A valid access token for your workspace see: https://docs.databricks.com/dev-tools/api/latest/authentication.html
+        data_module: pl LightningDataModule
+        model: pl LightningModule
+        root_dir: We need to set this to a /dbfs/ folder
+        epochs:
+        run_name: This name is used for MLFlow and also for the profiler logs
+        experiment_id:
+        args/kwargs: Args/Kwargs get fed into the pl.Trainer class
     
     """
 
     hvd.init()
 
-    # mlflow workaround
+    # mlflow workaround for python subprocess not receiving notebook token and workspace url
     mlflow.set_tracking_uri("databricks")
     os.environ['DATABRICKS_HOST'] = mlflow_db_host
     os.environ['DATABRICKS_TOKEN'] = mlflow_db_token
@@ -59,8 +64,7 @@ def build_trainer(num_gpus:int, root_dir:str, epoch:int=3, strat:str='ddp', node
                 run_name:str=None, *args, **kwargs):
     
     """
-    We want to build and return the training function first so that we can do some lr_tune
-    and also auto_batch_size determinations
+    We split out the function that builders the Trainer object so that we can customise it if needed and change the train procedure
 
     Args:
         data_dir: data module to fit in
@@ -98,7 +102,8 @@ def build_trainer(num_gpus:int, root_dir:str, epoch:int=3, strat:str='ddp', node
     callbacks.append(device_stats)
 
 
-    # Profilers
+    # Profilers - This is the key part to make sure that we can log perf stats and debug what is going wrong.
+    # See: https://pytorch.org/tutorials/recipes/recipes/profiler_recipe.html
 
     profiler = PyTorchProfiler(
         activities=[
@@ -115,6 +120,8 @@ def build_trainer(num_gpus:int, root_dir:str, epoch:int=3, strat:str='ddp', node
         with_stack=True)
 
     # main pytorch lightning trainer
+    # we also feed all the args/kwargs in
+    # See: https://pytorch-lightning.readthedocs.io/en/stable/common/trainer.html
     trainer = pl.Trainer(
         max_epochs=epoch,
         log_every_n_steps=100,
@@ -145,11 +152,12 @@ def main_train(data_module:Type[LightningDataModule], model:Type[LightningModule
         model: model to train on
         num_gpus: number of gpus to train on
         root_dir: 
-        epoch
-        strat
+        epoch:
+        strat:
         node_id: the number of the node
         run_name:
         experiment_id:
+        args/kwargs:
     
     """
 
@@ -178,6 +186,8 @@ def main_train(data_module:Type[LightningDataModule], model:Type[LightningModule
 if __name__ == '__main__':
 
     #main_train(data_path, AVAIL_GPUS)
+    # We can use %sh to run this as a script too
+    # See: https://docs.databricks.com/notebooks/notebooks-use.html#mix-languages
 
     hr = HorovodRunner(np=2, driver_log_verbosity='all')
 

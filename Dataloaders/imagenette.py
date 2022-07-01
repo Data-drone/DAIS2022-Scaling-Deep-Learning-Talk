@@ -8,6 +8,7 @@ class ImagenetteDataModule(LightningDataModule):
     """
     
     A dataloader ckass for imagenette
+    See: https://pytorch-lightning.readthedocs.io/en/stable/extensions/datamodules.html
     
     """
   
